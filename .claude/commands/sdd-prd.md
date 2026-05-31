@@ -47,7 +47,7 @@ Contexto carregado automaticamente:
 ## Fase 2 — Carregar contexto do projeto
 
 Leia (se existirem):
-- `docs/explanation/constitution.md` — para respeitar restrições e linguagem do projeto
+- `docs/constitution.md` (ou `docs/explanation/constitution.md` em layouts antigos) — para respeitar restrições e linguagem do projeto
 - `docs/patterns/README.md` — para entender o que já existe (ajuda a calibrar escopo realista)
 
 Esses arquivos ancoram o PRD na realidade do projeto. Se não existirem, prossiga sem eles, mas note internamente que o contexto é menor.
