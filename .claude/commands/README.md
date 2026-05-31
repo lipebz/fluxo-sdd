@@ -57,10 +57,23 @@ GEMINI.md     # opcional
 ## Setup inicial (uma vez só)
 
 1. Rode `/sdd-init` — gera `docs/constitution.md`, `docs/AGENTS.md` e os atalhos na raiz (`CLAUDE.md`, `AGENTS.md`, etc.) para os agentes que você usa.
-2. Preencha `docs/constitution.md` com a identidade real do projeto (stack, modelo de dados, anti-alucinação).
-3. Crie 3-4 arquivos em `docs/patterns/` apontando para exemplares reais do seu código.
-4. Coloque os comandos em `.claude/commands/` (versionados, compartilhados com o time).
+2. **Rode `/sdd-analyze`** — descobre a stack, mapeia a arquitetura, extrai patterns reais do seu código e ativa as skills da(s) stack(s). É o passo que faz a IA gerar código no padrão do seu projeto em vez de genérico. Em projeto novo (vazio), ele redireciona pro `/sdd-init` e você roda o analyze depois que houver código.
+3. Revise o `docs/constitution.md` gerado e qualquer skill auto-gerada via web (vêm marcadas pra revisão).
+4. Coloque os comandos em `.claude/commands/` e as skills em `.claude/skills/` (versionados, compartilhados com o time).
 5. (Opcional) Configure preview do VitePress/Fumadocs em PRs, se quiser revisão renderizada.
+
+> Quando o projeto evoluir (deps novas, módulo novo), rode `/sdd-analyze --incremental` — ele atualiza só o que mudou.
+
+---
+
+## Skills de stack (anti-alucinação)
+
+O que mais faz a IA alucinar não é falta de boas práticas universais — é não saber **como este projeto específico escreve**. O SDD ataca isso em duas camadas:
+
+- **Skills de stack** em `.claude/skills/stacks/<nome>/` — base de conhecimento técnico por stack (`SKILL.md` com golden rules + `references/` sobre arquitetura, convenções, testes). Vêm 5 curadas: `typescript`, `react`, `svelte`, `node-typescript`, `php-laravel`. Stacks não cobertas são sintetizadas da web pelo `/sdd-analyze` (marcadas `auto-gerada`).
+- **Patterns reais** em `docs/patterns/<stack>/` — esqueletos extraídos do **seu** código pelo `/sdd-analyze`. Quando há conflito, o pattern do projeto vence a regra universal da skill.
+
+Os comandos `/sdd-spec`, `/sdd-tasks`, `/sdd-run-all`, `/sdd-direct` e `/sdd-direct-close` carregam skill + patterns antes de gerar/implementar. Sem `/sdd-analyze`, eles ainda funcionam — só geram código mais genérico e avisam.
 
 ---
 
@@ -69,6 +82,7 @@ GEMINI.md     # opcional
 | Comando | O que faz |
 |---|---|
 | `/sdd-init` | Inicializa um projeto novo: gera `constitution.md`, `AGENTS.md` e os atalhos na raiz para os agentes IA escolhidos |
+| `/sdd-analyze [--incremental]` | Analisa o projeto em 5 camadas (identidade, arquitetura, dados, patterns reais, convenções), ativa skills da stack (locais ou da web) e materializa a base de conhecimento que o fluxo usa para não alucinar |
 | `/sdd-status [slug]` | Mostra onde cada change está e qual a próxima ação (read-only) |
 | `/sdd-new <texto>` | Entrevista curta, classifica em feat/fix/chore e cria o `00-idea.md` |
 | `/sdd-prd <slug>` | Gera o PRD (requisitos de negócio) com pesquisa na codebase e web |
@@ -77,6 +91,8 @@ GEMINI.md     # opcional
 | `/sdd-tasks <slug>` | Decompõe a SPEC em tasks pequenas com dependências, paralelismo e gera o `03-PLAN-EXEC.md` |
 | `/sdd-run-all <slug>` | Executa todas as tasks sequencialmente, 1 commit por task, sem pausa entre elas. **Retomável.** |
 | `/sdd-archive <slug>` | Fecha a change: dossiê final, sincroniza docs e atualiza CHANGELOG |
+| `/sdd-direct <descrição>` | **Fast path** — pula PRD/SPEC/tasks/approve, cria branch + nota WIP e começa a implementar direto |
+| `/sdd-direct-close [slug]` | Fecha o fast path — engenharia reversa do diff/commits para materializar PRD, SPEC, tasks (1 por commit), ADRs e CHANGELOG retroativamente |
 
 > Fluxos rápidos para fix e chore ainda não existem nesta versão. Todas as changes passam pelo fluxo de feature por enquanto. Um fluxo dedicado para bugs/pequenas alterações será reintroduzido depois.
 
@@ -86,6 +102,7 @@ GEMINI.md     # opcional
 
 ```bash
 /sdd-init                                     # uma vez por projeto
+/sdd-analyze                                  # uma vez por projeto (re-rode com --incremental quando mudar)
 /sdd-status                                       # qualquer hora (read-only)
 
 /sdd-new "adicionar exportação CSV"             # → 00-idea.md
@@ -102,6 +119,26 @@ GEMINI.md     # opcional
 ```
 
 O `/sdd-run-all` percorre o DAG em ordem topológica, in-place na `feat/{slug}`. Só **para** em ambiguidade real, teste sem solução, `files_touched` violation, ou dependência não satisfeita. Quando você resolve e roda de novo, ele **retoma de onde parou**.
+
+---
+
+## Fluxo rápido — Fast path (direct)
+
+Para mudanças pequenas/médias onde você já sabe o que fazer e não precisa de discovery, ADR explícito ou decomposição prévia:
+
+```bash
+/sdd-direct "alterar foto no perfil do usuário"   # cria feat/perfil-foto + nota WIP
+                                                  # você (ou a IA) implementa direto, commita por escopo
+                                                  # cada commit deve ter mensagem clara — vira 1 TASK retroativa
+/sdd-direct-close perfil-foto                     # engenharia reversa do diff: gera PRD, SPEC, tasks (1 por commit),
+                                                  # ADRs se houver, README delivered, CHANGELOG. Remove nota WIP.
+# merge final na main (squash) — igual ao fluxo normal
+```
+
+A change resultante é **indistinguível** de uma que passou pelo fluxo completo, exceto por marcas visíveis (`mode: direct`, `note: gerado retroativamente`, `(via fast path)` no CHANGELOG) — honestidade documental.
+
+**Quando usar fast path:** problema claro, escopo conhecido, sem decisão arquitetural durável.
+**Quando NÃO usar:** discovery de negócio (PRD com pesquisa), decisão de stack/arquitetura que merece debate prévio, coordenação entre múltiplas pessoas.
 
 ---
 
