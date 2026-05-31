@@ -7,3 +7,7 @@
 # Keep the commands directory and all its files tracked
 !commands/
 !commands/**
+
+# Keep the skills directory and all its files tracked (stack knowledge bases)
+!skills/
+!skills/**
