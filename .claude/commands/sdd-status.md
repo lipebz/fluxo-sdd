@@ -1,7 +1,7 @@
 ---
 description: Mostra o estado de todas as changes (ou de uma) lendo os frontmatters; deriva o estágio e sugere a próxima ação. Read-only.
 argument-hint: [slug-opcional]
-allowed-tools: Bash(find:*), Bash(grep:*), Bash(ls:*), Bash(cat:*), Bash(test:*), Bash(date:*), Bash(basename:*), Bash(sed:*), Read, Grep, Glob
+allowed-tools: Bash(find:*), Bash(grep:*), Bash(ls:*), Bash(cat:*), Bash(test:*), Bash(date:*), Bash(basename:*), Bash(sed:*), Bash(shasum:*), Bash(sha256sum:*), Bash(awk:*), Read, Grep, Glob
 ---
 
 # Comando /sdd-status
@@ -13,6 +13,7 @@ Argumento (slug opcional): `$ARGUMENTS`
 Contexto:
 - Data: !`date +%Y-%m-%d`
 - Changes existentes: !`find docs/changes -maxdepth 1 -mindepth 1 -type d 2>/dev/null | sort || echo "(nenhuma)"`
+- Direct WIP em curso? !`test -f .sdd-direct-WIP.md && cat .sdd-direct-WIP.md 2>/dev/null | grep -E '^(slug|branch|started_at):' || echo "(nenhum)"`
 
 ---
 
@@ -147,8 +148,30 @@ Mantenha compacto. Não inclua conteúdo dos artefatos, só estados.
 Ao final, se houver, liste em uma seção curta "⚠ Precisa de você":
 - Tasks `blocked` (com a feature a que pertencem)
 - Documentos em `draft` aguardando `/sdd-approve` (PRD, SPEC, PLAN-EXEC)
+- **Drift de PRD/SPEC** — para changes com tasks que têm `prd_hash`/`spec_hash` no frontmatter, recompute o hash do `01-PRD.md`/`02-SPEC.md` e compare. Se divergiu, sinalize: "⚠ {slug}: SPEC mudou desde a decomposição — tasks podem estar desatualizadas. Considere `/sdd-tasks {slug}`." (Read-only — só avisa, nunca corrige. Pule changes sem hash.)
+- **Direct WIP em curso** — se `.sdd-direct-WIP.md` existe no root, mostre o slug, a branch, o `started_at`, e a próxima ação (`/sdd-direct-close {slug}` quando terminar de implementar). Trate como uma change especial — ela ainda não tem pasta em `docs/changes/`, vive na memória da branch + nota WIP.
+- **Stack não analisada** — se `docs/constitution.md` não tem a seção `## Active Stacks` (ou não existe), sugira uma vez: "💡 Rode `/sdd-analyze` para que os comandos sigam a stack real do projeto." Não repita em toda linha — uma menção no rodapé basta.
+
+Hash de drift (quando aplicável):
+```bash
+shasum -a 256 docs/changes/{pasta}/02-SPEC.md | awk '{print $1}'   # compare com spec_hash da 1ª task
+```
 
 Se nada precisa de ação imediata, diga apenas "Nada pendente de você no momento."
+
+---
+
+## Fase 5 — Mostrar Direct WIP (se houver)
+
+Se `.sdd-direct-WIP.md` existe, adicione uma seção logo no topo da saída (antes das changes regulares), por exemplo:
+
+```
+🚀 DIRECT EM CURSO
+  feat {slug}          ▸ branch feat/{slug}, iniciado {data}
+                         próximo: implementar (ou /sdd-direct-close {slug} quando terminar)
+```
+
+Use a contagem de commits da branch (`git log main..feat/{slug} --oneline | wc -l`, se ferramenta de git estiver disponível) como sinal de progresso — se >0, é "implementação em andamento"; se 0, é "branch criada, ainda nada commitado".
 
 ---
 

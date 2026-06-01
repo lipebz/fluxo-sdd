@@ -1,7 +1,7 @@
 ---
 description: Decompõe uma SPEC validada em tasks pequenas com files_touched, depends_on, shared_resources e DoD; marca paralelismo automaticamente
 argument-hint: <slug-da-feature>
-allowed-tools: Bash(git:*), Bash(date:*), Bash(find:*), Bash(ls:*), Bash(wc:*), Bash(test:*), Read, Grep, Glob, Write
+allowed-tools: Bash(git:*), Bash(date:*), Bash(find:*), Bash(ls:*), Bash(wc:*), Bash(test:*), Bash(shasum:*), Bash(sha256sum:*), Bash(awk:*), Read, Grep, Glob, Write
 ---
 
 # Comando /sdd-tasks
@@ -21,7 +21,7 @@ Contexto carregado automaticamente:
 
 1. **Uma task = uma unidade coesa.** Uma camada (dados, lógica, http) ou um domínio. Nunca misture domínios diferentes na mesma task, nunca misture refactor de código não-tocado com feature nova.
 2. **`files_touched` é a fronteira dura.** Toda task declara exatamente os arquivos que pode tocar. Tasks que rodam em paralelo NÃO podem compartilhar arquivos em `files_touched`.
-3. **Recurso compartilhado → sequential.** Migrations, seeds estruturais, configs globais (`.env`, settings), filas/Redis/S3/storage, arquivos centrais de roteamento, containers/providers globais — qualquer arquivo ou recurso que múltiplas tasks tocariam ao mesmo tempo. Toda task que toca isso é `parallelism: sequential` e declara em `shared_resources`. Veja `docs/explanation/constitution.md` para a lista específica da stack do projeto.
+3. **Recurso compartilhado → sequential.** Migrations, seeds estruturais, configs globais (`.env`, settings), filas/Redis/S3/storage, arquivos centrais de roteamento, containers/providers globais — qualquer arquivo ou recurso que múltiplas tasks tocariam ao mesmo tempo. Toda task que toca isso é `parallelism: sequential` e declara em `shared_resources`. Veja o constitution (`docs/constitution.md`) e o `SKILL.md` da stack para a lista específica de recursos compartilhados do projeto.
 4. **Tasks pequenas.** Máximo ~200 linhas de spec por task, máximo ~10 arquivos em `files_touched`, máximo ~4h de implementação humana equivalente. Estourou qualquer limite → quebre em mais tasks.
 5. **Toda task carrega seu DoD.** Definition of Done embutido, não documento separado.
 6. **Não implemente.** Este comando só gera os arquivos de task.
@@ -51,7 +51,8 @@ Contexto carregado automaticamente:
 Leia:
 1. `02-SPEC.md` — especialmente a seção **"Arquivos a criar/modificar"**, que é o insumo principal da decomposição.
 2. `01-PRD.md` — para entender os objetivos (uma task nunca deve existir sem servir a um objetivo).
-3. `docs/explanation/constitution.md` — **especialmente a seção de paralelismo/recursos compartilhados.** É a regra que determina o que é `sequential`. Internalize a lista de recursos compartilhados do projeto.
+3. **Constitution** — `docs/constitution.md` (ou `docs/explanation/constitution.md` em layouts antigos): **especialmente a seção de paralelismo/recursos compartilhados.** É a regra que determina o que é `sequential`. Internalize a lista de recursos compartilhados do projeto.
+4. **Skill de arquitetura das stacks ativas** — para decompor por camada corretamente, você precisa saber como a stack organiza as camadas. Leia a seção `## Active Stacks` do constitution; para cada stack ativa, leia `.claude/skills/stacks/<skill>/references/architecture.md`. É o que diz se "foundation → lógica → HTTP" mapeia para `migration → service → controller` (Laravel), `domain → use-case → handler` (node-typescript), `route → load → component` (svelte), etc. Sem `## Active Stacks`, decomponha pela estrutura visível na SPEC e avise que `/sdd-analyze` daria decomposição mais precisa.
 
 ---
 
@@ -78,6 +79,23 @@ Transforme a lista de arquivos da SPEC em tasks seguindo estes princípios, nest
 
 ---
 
+## Fase 3.5 — Calcular hashes de drift (PRD e SPEC)
+
+As tasks nascem amarradas à versão do PRD e da SPEC que as geraram. Se o PRD/SPEC mudar depois (alguém edita a SPEC mas não regenera as tasks), as tasks ficam órfãs — implementando um plano que não bate mais com a fonte. Para detectar isso, grave o hash do PRD e da SPEC no frontmatter de **toda** task.
+
+Compute uma vez (o mesmo valor vai em todas as tasks deste lote):
+
+```bash
+shasum -a 256 docs/changes/{pasta}/01-PRD.md | awk '{print $1}'
+shasum -a 256 docs/changes/{pasta}/02-SPEC.md | awk '{print $1}'
+```
+
+(Se `shasum` não existir, use `sha256sum`.)
+
+Use os valores nos campos `prd_hash` e `spec_hash` do template abaixo. Eles são lidos por `/sdd-run-all` (antes de executar) e `/sdd-status` (relatório) para avisar de drift. Não bloqueiam — só alertam.
+
+---
+
 ## Fase 4 — Gerar os arquivos de task
 
 Crie a pasta `docs/changes/{pasta}/tasks/` e, dentro, um arquivo por task: `TASK-NNN-{slug-curto}.md` (NNN com zero-padding: 001, 002...). Use este template:
@@ -96,6 +114,8 @@ files_touched:                   # OBRIGATÓRIO, não-vazio
   - {caminho/exato/arquivo.ext}
   - {caminho/com/wildcard/*}
 shared_resources: []             # migration, rotas centrais, config, seeder... ou []
+prd_hash: {sha256-do-01-PRD.md}  # detecção de drift — ver Fase 3.5
+spec_hash: {sha256-do-02-SPEC.md}
 ---
 
 # TASK-NNN — {Título curto da task}
@@ -119,13 +139,13 @@ shared_resources: []             # migration, rotas centrais, config, seeder... 
 
 ## DoD
 - [ ] Critérios de aceite marcados
-- [ ] Testes passando (em banco isolado se a task tocar dados)
+- [ ] Quality gate passando — testes (em banco isolado se a task tocar dados) **OU**, se o projeto não tem testes (ver constitution §7), o gate real: type-check / `check` / `lint` / `build`
 - [ ] Sem TODO temporário
 - [ ] Observabilidade adicionada onde a SPEC pede
-- [ ] Segurança: conforme constitution (authorize via Policy, inputs validados)
+- [ ] Segurança: conforme constitution (authorize via Policy/auth, inputs validados)
 - [ ] ADR referenciada se a task materializa uma decisão registrada
 - [ ] files_touched bate com o diff
-- [ ] Nenhum teste deletado/comentado/skipado sem justificativa
+- [ ] Nenhum teste deletado/comentado/skipado sem justificativa (N/A se projeto sem testes)
 - [ ] Doc: deferida para /sdd-archive no fim da feature
 ```
 

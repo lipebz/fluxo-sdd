@@ -52,9 +52,23 @@ Contexto carregado automaticamente:
 Leia, nesta ordem:
 
 1. `01-PRD.md` da feature — a fonte do que precisa ser feito, incluindo a seção "Decisões em aberto" que esta SPEC deve resolver.
-2. `docs/explanation/constitution.md` — stack, padrões, anti-hallucination, regras de teste, regra de paralelismo/recursos compartilhados. **A SPEC deve respeitar tudo isso.**
-3. `docs/patterns/` — leia os patterns relevantes ao que a feature provavelmente cria. Infira a partir do PRD: se envolve lógica de negócio → leia `service.md`; se envolve endpoints → `controller.md`; autorização → `policy.md`; processamento assíncrono → `job.md`; e sempre `feature-test.md`.
-4. **Arquivos reais da codebase** citados no PRD (seção "Achados da pesquisa → Codebase"). Leia-os para basear decisões na realidade, não em suposição.
+2. **Constitution** — leia `docs/constitution.md` (ou `docs/explanation/constitution.md` em layouts antigos): stack, padrões, anti-hallucination, regras de teste, regra de paralelismo/recursos compartilhados. **A SPEC deve respeitar tudo isso.**
+3. **Skills das stacks ativas** (anti-alucinação — ver bloco abaixo). Carregue antes de propor qualquer arquitetura.
+4. `docs/patterns/` — leia os patterns relevantes ao que a feature provavelmente cria. Infira a partir do PRD e das stacks ativas: lógica de negócio → `service.md`; endpoints → `controller.md`; autorização → `policy.md`; processamento assíncrono → `job.md`; e sempre o pattern de teste da stack.
+5. **Arquivos reais da codebase** citados no PRD (seção "Achados da pesquisa → Codebase"). Leia-os para basear decisões na realidade, não em suposição.
+
+### Carregar skills das stacks ativas (anti-alucinação)
+
+A SPEC só fica fiel ao projeto se respeitar a stack real. Antes de desenhar a arquitetura:
+
+1. Leia a seção `## Active Stacks` do constitution. Ela lista as stacks ativas e a skill de cada uma (ex: `php-laravel → skill: php-laravel`).
+2. Para cada stack ativa, leia `.claude/skills/stacks/<skill>/SKILL.md` — golden rules e índice de references.
+3. Leia os `references/` **relevantes ao que a feature toca**, não todos:
+   - feature mexe em arquitetura/camadas → `references/architecture.md`
+   - feature define convenções de código novo → `references/conventions.md`
+   - feature exige estratégia de teste → `references/testing.md`
+4. **Sem `## Active Stacks` no constitution** (analyze nunca rodou): avise — "Nenhuma stack ativa no constitution. Rode `/sdd-analyze` para que a SPEC siga a stack real do projeto. Prosseguindo com SPEC genérica." E siga, sem bloquear.
+5. **Precedência quando há conflito:** `docs/patterns/` (o que o time realmente faz) > `SKILL.md` (boas práticas universais da stack). A SPEC segue o projeto, não o livro.
 
 ---
 

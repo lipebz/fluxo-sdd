@@ -44,13 +44,36 @@ Contexto carregado automaticamente:
 
 ## Fase 1 — Carregar tasks e validar DAG
 
-Leia o frontmatter de cada `tasks/TASK-NNN-*.md`: `id`, `status`, `parallelism`, `depends_on`, `shared_resources`, `files_touched`, `estimated_complexity`.
+Leia o frontmatter de cada `tasks/TASK-NNN-*.md`: `id`, `status`, `parallelism`, `depends_on`, `shared_resources`, `files_touched`, `estimated_complexity`, `prd_hash`, `spec_hash`.
 
 Valide:
 - **Sem ciclos** no grafo de `depends_on`.
 - **Referências válidas** — todo ID em `depends_on` existe.
 
 Se algo falhar, PARE e reporte. Não prossiga.
+
+### Checagem de drift (PRD/SPEC mudaram desde a decomposição?)
+
+Se as tasks têm `prd_hash`/`spec_hash` no frontmatter (geradas por uma versão recente do `/sdd-tasks`), recompute e compare:
+
+```bash
+shasum -a 256 docs/changes/{pasta}/01-PRD.md | awk '{print $1}'   # compare com prd_hash
+shasum -a 256 docs/changes/{pasta}/02-SPEC.md | awk '{print $1}'  # compare com spec_hash
+```
+
+- **Hashes batem** → ok, prossiga silenciosamente.
+- **`spec_hash` divergiu** → a SPEC mudou depois de gerar as tasks. **AVISE** (não bloqueie):
+  ```
+  ⚠ Drift detectado: a SPEC mudou desde que as tasks foram geradas.
+    As tasks podem não refletir mais o plano técnico atual.
+    Opções:
+      1. Regenerar as tasks: /sdd-tasks {slug} (descarta a decomposição atual)
+      2. Prosseguir mesmo assim (as tasks podem estar desatualizadas)
+    Como deseja prosseguir?
+  ```
+  Encerre o turno e espere a decisão. Não execute por cima de drift sem o usuário saber.
+- **Só `prd_hash` divergiu** (SPEC intacta) → drift mais leve (o negócio mudou mas o plano técnico não). Avise em uma linha e pergunte se quer prosseguir.
+- **Tasks sem `prd_hash`/`spec_hash`** (geradas por versão antiga) → não há baseline para comparar. Siga normalmente, sem aviso.
 
 Calcule a **ordem topológica** (linearização do DAG):
 - Tasks sem `depends_on` primeiro.
@@ -92,9 +115,10 @@ A partir da ordem topológica:
 3. **Carregar contexto comum** (apenas uma vez, no início; reaproveite para todas as tasks da execução):
    - `02-SPEC.md` — arquitetura geral.
    - `01-PRD.md` — objetivos.
-   - `docs/explanation/constitution.md` — stack, padrões, segurança, anti-hallucination, testes.
+   - **Constitution** — `docs/constitution.md` (ou `docs/explanation/constitution.md` em layouts antigos): stack, padrões, segurança, anti-hallucination, testes.
+   - **Skills das stacks ativas** — leia a seção `## Active Stacks` do constitution. Para cada stack ativa, leia `.claude/skills/stacks/<skill>/SKILL.md` (golden rules + comando de teste/lint da stack). Os `references/` específicos são lidos sob demanda por task na Fase 4a. Sem `## Active Stacks`, avise que `/sdd-analyze` melhoraria a aderência e siga com conhecimento genérico.
    - ADRs referenciados na SPEC.
-   - `docs/patterns/` — os patterns que se aplicam à feature.
+   - `docs/patterns/` — os patterns que se aplicam à feature (precedência sobre o SKILL.md em caso de conflito — o código do time vence).
 
 ---
 
@@ -107,6 +131,13 @@ Para cada task pendente, na ordem calculada, execute o subprocesso completo abai
 Leia o `TASK-NNN.md` inteiro: objetivo, escopo, restrições, `files_touched`, critérios de aceite, DoD.
 
 Leia **os arquivos reais** que a task vai **modificar** (não os que vai criar). Mantenha o contexto enxuto.
+
+**Carregue os references da skill relevantes a esta task** (não a feature inteira). Olhe os `files_touched`:
+- toca controller/handler/rota/componente → `references/architecture.md` (camadas) + o pattern correspondente em `docs/patterns/`
+- escreve/altera testes → `references/testing.md`
+- cria código novo onde convenções importam → `references/conventions.md`
+
+Carregue só o que a task precisa — o SKILL.md já está no contexto comum (Fase 3). Isso mantém a janela enxuta task a task.
 
 ### 4b — Marcar início
 
@@ -122,15 +153,24 @@ Implemente o escopo, restrito aos `files_touched`. Regras (todas elas dos comand
 - **Grep antes de referenciar.** Qualquer método/classe/coluna que você usa de outra parte do código — confirme que existe com grep antes.
 - **Se aparecer ambiguidade** que SPEC e task não resolvem, vá para **Fase 5a (parada por ambiguidade)**.
 
-### 4d — Testes
+### 4d — Quality gate (testes ou check/lint)
 
+Use o **quality gate real do projeto**, definido na §7 do constitution (Fase 5.6 do `/sdd-analyze`). Dois cenários:
+
+**Projeto COM testes** (há test runner configurado):
 1. Escreva/atualize os testes que a task exige (critérios de aceite costumam mapear para asserts).
-2. Rode a suíte relevante (use o banco da branch — sem isolamento; se a task altera schema, rode o comando de "reset+migrate" da stack — definido em `docs/explanation/constitution.md` — antes. Só faça isso se a task de fato envolve mudança de migration). O comando de teste também é o definido na constitution (ex: `vitest`, `pytest`, `go test`, `php artisan test`).
+2. Rode a suíte relevante (use o banco da branch — sem isolamento; se a task altera schema, rode o comando de "reset+migrate" da stack — definido no constitution e no `SKILL.md` da stack — antes. Só faça isso se a task de fato envolve mudança de migration). O comando de teste é o definido na constitution / `SKILL.md` da stack (ex: `vitest`, `pytest`, `go test`, `php artisan test` / `pest`).
 3. **Se um teste existente quebrar:** investigue.
    - Se a regra de negócio mudou (a SPEC pede isso): ajuste o teste com justificativa no commit. Prossiga.
    - Se você quebrou algo: corrija o código. Prossiga só quando os testes voltarem a passar.
    - Se não consegue resolver após investigação razoável: vá para **Fase 5c (parada por teste)**.
 4. **Nunca** delete/comente/skipe teste para fazer outro passar.
+
+**Projeto SEM testes** (constitution §7 diz "sem testes automatizados"):
+1. **Não invente um test runner.** Não escreva testes "porque é boa prática" — não há runner pra rodá-los.
+2. Rode o gate que existe: type-check / `check` / `lint` / `build` (o comando real definido na §7). Ex: `bun run check && bun run lint`.
+3. Se o gate falhar (erro de tipo, lint), corrija antes de prosseguir — mesma régua de "teste quebrado". Se não conseguir resolver, vá para **Fase 5c**.
+4. Se nem gate de check/lint existir (raro), faça uma revisão estática cuidadosa do diff e registre no relatório do commit que não houve gate automatizado disponível.
 
 ### 4e — Validar diff contra `files_touched`
 
