@@ -87,10 +87,11 @@ cp /tmp/fluxo-sdd/.claude/.gitignore  .claude/.gitignore
 ## Setup inicial (uma vez só)
 
 1. Rode `/sdd-init` — gera `docs/constitution.md`, `docs/AGENTS.md` e os atalhos na raiz (`CLAUDE.md`, `AGENTS.md`, etc.) para os agentes que você usa.
-2. Preencha `docs/constitution.md` com a identidade real do projeto (stack, modelo de dados, anti-alucinação).
-3. Crie 3-4 arquivos em `docs/patterns/` apontando para exemplares reais do seu código.
-4. Coloque os comandos em `.claude/commands/` (versionados, compartilhados com o time).
-5. (Opcional) Configure preview do VitePress/Fumadocs em PRs, se quiser revisão renderizada.
+2. Rode `/sdd-analyze` — analisa a codebase (stack, arquitetura, modelo de dados, patterns reais, convenções) e preenche `docs/constitution.md` e `docs/patterns/` automaticamente. Em projetos com código existente, substitui o passo manual abaixo.
+3. Revise `docs/constitution.md` — confirme identidade, modelo de dados e regras anti-alucinação detectadas. Preencha o que o analyze deixou como `[a confirmar]`.
+4. [Opcional, se não rodou `/sdd-analyze`] Crie 3-4 arquivos em `docs/patterns/` apontando para exemplares reais do seu código.
+5. Coloque os comandos em `.claude/commands/` (versionados, compartilhados com o time).
+6. (Opcional) Configure preview do VitePress/Fumadocs em PRs, se quiser revisão renderizada.
 
 ---
 
@@ -99,6 +100,7 @@ cp /tmp/fluxo-sdd/.claude/.gitignore  .claude/.gitignore
 | Comando | O que faz |
 |---|---|
 | `/sdd-init` | Inicializa um projeto novo: gera `constitution.md`, `AGENTS.md` e os atalhos na raiz para os agentes IA escolhidos |
+| `/sdd-analyze [--incremental] [caminho]` | Analisa o projeto em profundidade (5 camadas: identidade, arquitetura, dados, patterns reais, convenções); ativa skills da stack detectada; preenche `docs/constitution.md` e `docs/patterns/` automaticamente. `--incremental` re-analisa só o que mudou desde a última execução |
 | `/sdd-status [slug]` | Mostra onde cada change está e qual a próxima ação (read-only) |
 | `/sdd-new <texto>` | Entrevista curta, classifica em feat/fix/chore e cria o `00-idea.md` |
 | `/sdd-prd <slug>` | Gera o PRD (requisitos de negócio) com pesquisa na codebase e web |
@@ -107,15 +109,18 @@ cp /tmp/fluxo-sdd/.claude/.gitignore  .claude/.gitignore
 | `/sdd-tasks <slug>` | Decompõe a SPEC em tasks pequenas com dependências, paralelismo e gera o `03-PLAN-EXEC.md` |
 | `/sdd-run-all <slug>` | Executa todas as tasks sequencialmente, 1 commit por task, sem pausa entre elas. **Retomável.** |
 | `/sdd-archive <slug>` | Fecha a change: dossiê final, sincroniza docs e atualiza CHANGELOG |
+| `/sdd-direct <texto>` | **Fluxo Direto:** pula PRD/SPEC/tasks/approve e começa a implementar direto em branch `feat/{slug}`. Documentação materializada retroativamente pelo `/sdd-direct-close`. Indicado para mudanças pequenas/médias onde o problema já está claro |
+| `/sdd-direct-close <slug>` | Fecha uma change iniciada com `/sdd-direct` — faz engenharia reversa do diff e commits para materializar PRD, SPEC, tasks (1 por commit), README e CHANGELOG retroativamente, tudo já em estado terminal. Remove a nota WIP |
 
 > Fluxos rápidos para fix e chore ainda não existem nesta versão. Todas as changes passam pelo fluxo de feature por enquanto. Um fluxo dedicado para bugs/pequenas alterações será reintroduzido depois.
 
 ---
 
-## Fluxo único — Feature
+## Fluxo Completo — Feature
 
 ```bash
 /sdd-init                                     # uma vez por projeto
+/sdd-analyze                                  # analisa codebase → preenche constitution + patterns
 /sdd-status                                       # qualquer hora (read-only)
 
 /sdd-new "adicionar exportação CSV"             # → 00-idea.md
@@ -132,6 +137,30 @@ cp /tmp/fluxo-sdd/.claude/.gitignore  .claude/.gitignore
 ```
 
 O `/sdd-run-all` percorre o DAG em ordem topológica, in-place na `feat/{slug}`. Só **para** em ambiguidade real, teste sem solução, `files_touched` violation, ou dependência não satisfeita. Quando você resolve e roda de novo, ele **retoma de onde parou**.
+
+---
+
+## Fluxo Direto — mudanças pequenas/médias
+
+Quando você já sabe o que fazer e não precisa de PRD, SPEC ou decomposição prévia:
+
+```bash
+/sdd-direct "corrigir bug no cálculo de desconto"
+# → cria feat/{slug}, nota WIP efêmera, carrega stack e implementa
+# commite por escopo coeso — cada commit vira 1 TASK retroativa
+
+/sdd-direct-close desconto-bug
+# → PRD/SPEC/tasks/CHANGELOG retroativos já em estado terminal
+# → nota WIP removida
+# merge final na main (squash)
+```
+
+Use o **Fluxo Completo** para mudanças grandes, decisões arquiteturais (ADR), ou quando há discovery de negócio. Use o **Fluxo Direto** para tudo que "você já sabe como fazer".
+
+**Trade-offs aceitos:**
+- Sem PRD aprovado antes de codar — sem rede de segurança de negócio.
+- Sem SPEC antes de codar — sem ADR explícito (ainda pode ser gerado no close).
+- Sem `files_touched` declarado — você toca onde precisar; o close reconstrói a partir do diff.
 
 ---
 
@@ -166,4 +195,4 @@ Rode `/sdd-status` a qualquer momento para ver tudo de uma vez.
 
 ## Em uma frase
 
-Você descreve o que quer (`/sdd-new`), valida o plano que a IA propõe a cada etapa com `/sdd-approve` (`/sdd-prd` → `/sdd-spec` → `/sdd-tasks`), e deixa a IA implementar em batch autônomo (`/sdd-run-all`), fechando com a documentação em dia (`/sdd-archive`). O Git e os arquivos guardam todo o histórico — sem board, sem ferramenta externa.
+Você descreve o que quer (`/sdd-new`), valida o plano que a IA propõe a cada etapa com `/sdd-approve` (`/sdd-prd` → `/sdd-spec` → `/sdd-tasks`), e deixa a IA implementar em batch autônomo (`/sdd-run-all`), fechando com a documentação em dia (`/sdd-archive`). Para mudanças pequenas onde você já sabe o que fazer, o Fluxo Direto (`/sdd-direct` → implementar → `/sdd-direct-close`) pula as etapas de descoberta e materializa a documentação retroativamente. O Git e os arquivos guardam todo o histórico — sem board, sem ferramenta externa.
