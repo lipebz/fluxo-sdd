@@ -54,6 +54,36 @@ GEMINI.md     # opcional
 
 ---
 
+## Instalação em um projeto
+
+O kit é só arquivos `.md` em `.claude/` — sem build, sem dependência. Use o instalador (recomendado) ou copie à mão.
+
+### Instalador (recomendado)
+
+```bash
+# da raiz do seu projeto:
+curl -fsSL https://raw.githubusercontent.com/lipebz/fluxo-sdd/main/install.sh | bash
+
+# ou, se já clonou este repo:
+bash /caminho/do/fluxo-sdd/install.sh /caminho/do/seu-projeto
+```
+
+O `install.sh` clona o kit do GitHub e copia `commands/` e `skills/` para o `.claude/` do projeto, de forma segura: nunca apaga skills próprias do seu projeto, faz backup (`.bak-TIMESTAMP`) de qualquer arquivo que já exista e difira, e mescla o `.claude/.gitignore` em vez de sobrescrever. Rodar de novo é idempotente.
+
+### À mão
+
+```bash
+git clone https://github.com/lipebz/fluxo-sdd.git /tmp/fluxo-sdd
+mkdir -p .claude
+cp -r /tmp/fluxo-sdd/.claude/commands .claude/
+cp -r /tmp/fluxo-sdd/.claude/skills   .claude/
+cp /tmp/fluxo-sdd/.claude/.gitignore  .claude/.gitignore
+```
+
+> O `.claude/.gitignore` garante que `commands/` e `skills/` sejam versionados (compartilhados com o time). Se o seu projeto já tem um, mescle as regras `!commands/` e `!skills/`.
+
+---
+
 ## Setup inicial (uma vez só)
 
 1. Rode `/sdd-init` — gera `docs/constitution.md`, `docs/AGENTS.md` e os atalhos na raiz (`CLAUDE.md`, `AGENTS.md`, etc.) para os agentes que você usa.
